@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>lolita megabürger ブロック崩し</title>
+  <style>
+    body, html { margin: 0; padding: 0; overflow: hidden; background: #000; }
+    #gameCanvas { display: block; background: #00f; }
+    #startScreen, #gameOverScreen {
+      position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+      display: flex; flex-direction: column; justify-content: center; align-items: center;
+      background: rgba(0, 0, 0, 0.7); z-index: 10;
+      color: #fff; font-family: sans-serif;
+    }
+    #startScreen.hidden, #gameOverScreen.hidden { display: none; }
+    button { font-size: 1.5rem; padding: 10px 20px; cursor: pointer; }
+  </style>
+</head>
+<body>
+  <canvas id="gameCanvas"></canvas>
+  <div id="startScreen">
+    <img id="logo" src="https://i1.sndcdn.com/artworks-aGFKdOkmBGtt9l2Z-X1HLkw-t240x240.jpg" alt="Logo">
+    <h1>lolita megabürger ブロック崩し</h1>
+    <button id="startButton">START</button>
+  </div>
+  <div id="gameOverScreen" class="hidden">
+    <h1>GAME OVER</h1>
+    <p>score: <span id="finalScore">0</span></p>
+    <button id="restartButton">RESTART</button>
+  </div>
+
+  <script>
+  (function() {
+    const canvas = document.getElementById('gameCanvas');
+    const ctx = canvas.getContext('2d');
+    const W = canvas.width = window.innerWidth;
+    const H = canvas.height = window.innerHeight;
+
+    // Images & assets
+    const ballImgSrc = 'https://i.pinimg.com/736x/29/35/fd/2935fd34d01e87d15eea56212bd40b17.jpg';
+    const bgTileSrc = 'https://i.pinimg.com/736x/3d/79/a9/3d79a96947789566d9e60db9a4055d8a.jpg';
+    const blockImgs = [
+      'https://i.pinimg.com/736x/35/1d/48/351d48c7fb13c283385f4ad0f26e8607.jpg',
+      'https://i.pinimg.com/736x/ec/25/55/ec25558ba9f30466711ddfc10de15781.jpg',
+      'https://i.pinimg.com/736x/f1/04/ff/f104ffe0de58f3a7506c57c91d6ff972.jpg'
+    ];
+    const explosionGif = 'https://i.pinimg.com/originals/ed/1e/98/ed1e98dab7f9d865ee61f075f77ec18d.gif';
+    const paddleImgSrc = 'https://i.pinimg.com/736x/ce/43/09/ce4309d56d296585fc3e0133799e625f.jpg';
+    const wallTileSrc = 'https://i.pinimg.com/736x/e4/ec/39/e4ec39fde327ac46e011473f063086ff.jpg';
+    const bgmUrl = 'https://raw.githubusercontent.com/Emon2358/lolita-megab-rger-block-crasher-game/main/%E3%81%8Am4a';
+    // SE URLs
+    const explosionSE = new Audio('https://yourcdn.example.com/sounds/explosion.mp3');
+    explosionSE.volume = 1.0;
+    const bellSE = new Audio('https://yourcdn.example.com/sounds/bell.mp3');
+    bellSE.loop = true;
+
+    // Game variables
+    let paddle, ball, blocks;
+    let leftPressed = false, rightPressed = false;
+    let score = 0;
+    const maxScore = 10000;
+    let stage = 1;
+    let gameInterval;
+
+    // Initialize assets
+    const ballImg = new Image(); ballImg.src = ballImgSrc;
+    const bgTile = new Image(); bgTile.src = bgTileSrc;
+    const paddleImg = new Image(); paddleImg.src = paddleImgSrc;
+    const wallTile = new Image(); wallTile.src = wallTileSrc;
+    const blockImages = blockImgs.map(src => { let i=new Image(); i.src=src; return i; });
+    const explosionImage = new Image(); explosionImage.src = explosionGif;
+    const bgm = new Audio(bgmUrl);
+    bgm.loop = true;
+
+    document.getElementById('startButton').addEventListener('click', startGame);
+    document.getElementById('restartButton').addEventListener('click', restartGame);
+    document.addEventListener('keydown', e => { if(e.key==='ArrowLeft') leftPressed=true; if(e.key==='ArrowRight') rightPressed=true; });
+    document.addEventListener('keyup', e => { if(e.key==='ArrowLeft') leftPressed=false; if(e.key==='ArrowRight') rightPressed=false; });
+
+    function resetEntities() {
+      paddle = { x: W/2 - 75, y: H - 50, w: 150, h: 20, speed: 8 };
+      ball = { x: W/2, y: H/2, r: 20, vx: 5, vy: -5 };
+      blocks = [];
+      const cols = 10, rows = stage + 4;
+      const blockW = W/cols, blockH = 30;
+      for(let y=0; y<rows; y++){
+        for(let x=0; x<cols; x++){
+          const img = blockImages[Math.floor(Math.random()*blockImages.length)];
+          blocks.push({ x: x*blockW, y: 50 + y*blockH, w: blockW-2, h: blockH-2, img, alive: true });
+        }
+      }
+    }
+
+    function startGame() {
+      document.getElementById('startScreen').classList.add('hidden');
+      score = 0; stage = 1;
+      resetEntities();
+      bgm.play();
+      requestAnimationFrame(gameLoop);
+    }
+
+    function restartGame() {
+      bellSE.pause(); bellSE.currentTime = 0;
+      document.getElementById('gameOverScreen').classList.add('hidden');
+      startGame();
+    }
+
+    function gameLoop() {
+      update(); draw();
+      if(ball.y - ball.r > H) return gameOver();
+      requestAnimationFrame(gameLoop);
+    }
+
+    function update() {
+      if(leftPressed) paddle.x -= paddle.speed;
+      if(rightPressed) paddle.x += paddle.speed;
+      paddle.x = Math.max(0, Math.min(W - paddle.w, paddle.x));
+      ball.x += ball.vx; ball.y += ball.vy;
+      if(ball.x - ball.r < 0 || ball.x + ball.r > W) ball.vx *= -1;
+      if(ball.y - ball.r < 0) ball.vy *= -1;
+      if(ball.x > paddle.x && ball.x < paddle.x + paddle.w && ball.y + ball.r > paddle.y) {
+        ball.vy *= -1;
+      }
+      blocks.forEach(b => {
+        if(!b.alive) return;
+        if(ball.x > b.x && ball.x < b.x + b.w && ball.y - ball.r < b.y + b.h && ball.y + ball.r > b.y) {
+          b.alive = false;
+          ball.vy *= -1;
+          ctx.drawImage(explosionImage, b.x, b.y, b.w, b.h);
+          explosionSE.play();
+          score = Math.min(maxScore, score + 100);
+        }
+      });
+      if(blocks.every(b => !b.alive)) nextStage();
+    }
+
+    function nextStage() {
+      stage++;
+      resetEntities();
+    }
+
+    function gameOver() {
+      bgm.pause();
+      bellSE.play();
+      document.getElementById('finalScore').textContent = score;
+      document.getElementById('gameOverScreen').classList.remove('hidden');
+    }
+
+    function draw() {
+      ctx.fillStyle = ctx.createPattern(bgTile, 'repeat');
+      ctx.fillRect(0, 0, W, H);
+      ctx.fillStyle = ctx.createPattern(wallTile, 'repeat-y');
+      ctx.fillRect(0,0,20,H);
+      ctx.fillRect(W-20,0,20,H);
+      blocks.forEach(b => { if(b.alive) ctx.drawImage(b.img, b.x, b.y, b.w, b.h); });
+      ctx.drawImage(paddleImg, paddle.x, paddle.y, paddle.w, paddle.h);
+      ctx.save(); ctx.beginPath(); ctx.arc(ball.x, ball.y, ball.r, 0, Math.PI*2); ctx.clip();
+      ctx.drawImage(ballImg, ball.x-ball.r, ball.y-ball.r, ball.r*2, ball.r*2);
+      ctx.restore();
+      ctx.fillStyle = '#fff'; ctx.font = '20px sans-serif';
+      ctx.fillText(`Score: ${score}`, 30, 30);
+      ctx.fillText(`Stage: ${stage}`, 30, 60);
+    }
+  })();
+  </script>
+</body>
+</html>
