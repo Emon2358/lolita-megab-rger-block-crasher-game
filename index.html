@@ -3,216 +3,252 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>lolita megabürger ブロック崩し - Ultimate Edition</title>
+  <title>lolita megabürger ブロック崩し</title>
   <style>
-    body, html { margin: 0; padding: 0; overflow: hidden; background: #000; }
-    #gameCanvas { display: block; background: #000; }
-    /* HUD */
-    #hud { position: absolute; top: 0; left: 0; width: 100%; display: flex; justify-content: space-between; padding: 8px; font-family: sans-serif; color: #fff; z-index: 20; }
-    #hud button { font-size: 1rem; padding: 5px 10px; }
-    /* Overlay Screens */
-    .overlay { position: absolute; top:0; left:0; width:100%; height:100%; display:flex; flex-direction:column; justify-content:center; align-items:center; background: rgba(0,0,0,0.8); color:#fff; font-family:sans-serif; z-index: 30; }
-    .overlay.hidden { display:none; }
-    .overlay button { font-size:1.5rem; padding:10px 20px; margin-top:10px; }
-    /* Settings Panel */
-    #settingsPanel { position:absolute; right:10px; top:50px; width:200px; background:rgba(0,0,0,0.7); padding:10px; border-radius:8px; color:#fff; z-index:25; display:none; }
-    #settingsPanel label, #settingsPanel select { display:block; margin-bottom:8px; }
-    /* Leaderboard */
-    #leaderboard { position:absolute; left:10px; top:50px; width:200px; background:rgba(0,0,0,0.7); padding:10px; border-radius:8px; color:#fff; z-index:25; }
+    html, body {
+      margin: 0;
+      padding: 0;
+      overflow: hidden;
+      background: #000;
+    }
+
+    #gameCanvas {
+      display: block;
+      background: #00f;
+    }
+
+    #startScreen,
+    #gameOverScreen {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      background: rgba(0, 0, 0, 0.7);
+      z-index: 10;
+      color: #fff;
+      font-family: sans-serif;
+    }
+
+    /* 非表示用クラス */
+    .hidden {
+      display: none;
+    }
+
+    button {
+      font-size: 1.5rem;
+      padding: 10px 20px;
+      cursor: pointer;
+    }
   </style>
 </head>
 <body>
   <canvas id="gameCanvas"></canvas>
-  <div id="hud">
-    <button id="pauseBtn">PAUSE</button>
-    <div>
-      <span id="scoreDisplay">Score: 0</span> |
-      <span id="stageDisplay">Stage: 1</span>
-    </div>
-    <button id="settingsBtn">⚙️</button>
-  </div>
-  <div id="settingsPanel">
-    <label>Volume: <input type="range" id="volumeSlider" min="0" max="1" step="0.01" value="0.5"></label>
-    <label>Difficulty: <select id="difficultySelect"><option value="easy">Easy</option><option value="normal" selected>Normal</option><option value="hard">Hard</option></select></label>
-    <label>Skin: <select id="skinSelect"><option value="default">Default</option><option value="neon">Neon</option><option value="dark">Dark</option></select></label>
-  </div>
-  <div id="leaderboard">
-    <h3>Leaderboard</h3>
-    <ol id="leaderList"></ol>
-  </div>
-  <div id="startScreen" class="overlay">
-    <img id="logo" src="https://i1.sndcdn.com/artworks-aGFKdOkmBGtt9l2Z-X1HLkw-t240x240.jpg" alt="Logo">
+
+  <div id="startScreen">
+    <img
+      id="logo"
+      src="https://i1.sndcdn.com/artworks-aGFKdOkmBGtt9l2Z-X1HLkw-t240x240.jpg"
+      alt="Logo"
+    >
     <h1>lolita megabürger ブロック崩し</h1>
     <button id="startButton">START</button>
   </div>
-  <div id="gameOverScreen" class="overlay hidden">
+
+  <div id="gameOverScreen" class="hidden">
     <h1>GAME OVER</h1>
     <p>score: <span id="finalScore">0</span></p>
-    <p>high score: <span id="highScoreDisplay">0</span></p>
     <button id="restartButton">RESTART</button>
   </div>
-  <script type="module">
-  // --- Settings & Storage ---
-  const highScoreKey = 'lm_breakout_high';
-  let highScore = localStorage.getItem(highScoreKey) || 0;
-  document.getElementById('highScoreDisplay').textContent = highScore;
-  const settings = { volume:0.5, difficulty:'normal', skin:'default' };
-  
-  // --- Canvas Setup ---
-  const canvas = document.getElementById('gameCanvas');
-  const ctx = canvas.getContext('2d');
-  let W = canvas.width = window.innerWidth;
-  let H = canvas.height = window.innerHeight;
-  
-  // --- Asset Preloader ---
-  const assets = {};
-  const assetList = {
-    ball:'https://i.pinimg.com/736x/29/35/fd/2935fd34d01e87d15eea56212bd40b17.jpg',
-    bgTile:'https://i.pinimg.com/736x/3d/79/a9/3d79a96947789566d9e60db9a4055d8a.jpg',
-    paddle:'https://i.pinimg.com/736x/ce/43/09/ce4309d56d296585fc3e0133799e625f.jpg',
-    wall:'https://i.pinimg.com/736x/e4/ec/39/e4ec39fde327ac46e011473f063086ff.jpg',
-    explosion:'https://i.pinimg.com/originals/ed/1e/98/ed1e98dab7f9d865ee61f075f77ec18d.gif'
-  };
-  let loaded = 0, totalAssets = Object.keys(assetList).length;
-  function loadAssets(callback){
-    for(let key in assetList){
-      const img = new Image(); img.src = assetList[key];
-      img.onload = ()=>{ assets[key]=img; if(++loaded===totalAssets) callback(); };
-    }
-  }
 
-  // --- Game Entities ---
-  class Block { constructor(x,y,w,h,img,dur){ this.x=x; this.y=y; this.w=w; this.h=h; this.img=img; this.dur=dur; this.maxDur=dur; this.alive=true;} }
-  class Ball { constructor(x,y,vx,vy){ this.x=x; this.y=y; this.r=12; this.vx=vx; this.vy=vy; } }
-  class Paddle { constructor(){ this.w=120; this.h=16; this.x=(W-this.w)/2; this.y=H-60; this.speed=8; } }
-  class PowerUp { constructor(x,y,type){ this.x=x; this.y=y; this.r=10; this.vy=2; this.type=type; } update(){ this.y+=this.vy;} draw(){ ctx.beginPath(); ctx.arc(this.x,this.y,this.r,0,2*Math.PI); ctx.fillStyle = this.type==='multi'?'yellow':this.type==='widen'?'cyan':'orange'; ctx.fill(); } }
+  <script>
+    (function() {
+      // Canvas 設定
+      const canvas = document.getElementById('gameCanvas');
+      const ctx = canvas.getContext('2d');
+      const W = (canvas.width = window.innerWidth);
+      const H = (canvas.height = window.innerHeight);
 
-  // --- Variables ---
-  let paddle, balls, blocks, powerUps, score, stage;
-  let paused=false, gamepadIndex=null;
+      // アセット
+      const assets = {
+        ballImg: 'https://i.pinimg.com/736x/29/35/fd/2935fd34d01e87d15eea56212bd40b17.jpg',
+        bgTile: 'https://i.pinimg.com/736x/3d/79/a9/3d79a96947789566d9e60db9a4055d8a.jpg',
+        blockImgs: [
+          'https://i.pinimg.com/736x/35/1d/48/351d48c7fb13c283385f4ad0f26e8607.jpg',
+          'https://i.pinimg.com/736x/ec/25/55/ec25558ba9f30466711ddfc10de15781.jpg',
+          'https://i.pinimg.com/736x/f1/04/ff/f104ffe0de58f3a7506c57c91d6ff972.jpg'
+        ],
+        explosionGif: 'https://i.pinimg.com/originals/ed/1e/98/ed1e98dab7f9d865ee61f075f77ec18d.gif',
+        paddleImg: 'https://i.pinimg.com/736x/ce/43/09/ce4309d56d296585fc3e0133799e625f.jpg',
+        wallTile: 'https://i.pinimg.com/736x/e4/ec/39/e4ec39fde327ac46e011473f063086ff.jpg',
+        bgm: 'https://raw.githubusercontent.com/Emon2358/lolita-megab-rger-block-crasher-game/main/%E3%81%8A.m4a',
+        explosionSE: 'https://yourcdn.example.com/sounds/explosion.mp3',
+        bellSE: 'https://yourcdn.example.com/sounds/bell.mp3'
+      };
 
-  // --- Initialize ---
-  function resetEntities(){
-    paddle=new Paddle();
-    balls=[ new Ball(W/2,H/2,5, -5) ];
-    blocks=[];
-    powerUps=[];
-    const cols=10, rows=stage+3;
-    const bw=W/cols, bh=24;
-    for(let y=0;y<rows;y++) for(let x=0;x<cols;x++){
-      const dur = Math.ceil(Math.random()*2);
-      const img = assets.bgTile;
-      blocks.push(new Block(x*bw,50+y*bh,bw-2,bh-2,img,dur));
-    }
-  }
+      // ゲーム変数
+      let paddle, ball, blocks;
+      let leftPressed = false, rightPressed = false;
+      let score = 0, stage = 1;
+      const maxScore = 10000;
 
-  // --- Input ---
-  const keys={left:false,right:false};
-  window.addEventListener('keydown',e=>{ if(e.key==='ArrowLeft') keys.left=true; if(e.key==='ArrowRight') keys.right=true; });
-  window.addEventListener('keyup',e=>{ if(e.key==='ArrowLeft') keys.left=false; if(e.key==='ArrowRight') keys.right=false; });
-  canvas.addEventListener('touchmove',e=>{ paddle.x = e.touches[0].clientX - paddle.w/2; });
+      // イメージ & オーディオオブジェクト
+      const imgObjects = {
+        ball: new Image(),
+        bgTile: new Image(),
+        paddle: new Image(),
+        wallTile: new Image(),
+        explosion: new Image(),
+        blockImgs: assets.blockImgs.map(src => { const img = new Image(); img.src = src; return img; })
+      };
+      imgObjects.ball.src = assets.ballImg;
+      imgObjects.bgTile.src = assets.bgTile;
+      imgObjects.paddle.src = assets.paddleImg;
+      imgObjects.wallTile.src = assets.wallTile;
+      imgObjects.explosion.src = assets.explosionGif;
 
-  // --- UI Controls ---
-  document.getElementById('startButton').onclick = startGame;
-  document.getElementById('restartButton').onclick = ()=>{ document.getElementById('gameOverScreen').classList.add('hidden'); startGame(); };
-  document.getElementById('pauseBtn').onclick = ()=>{ paused=!paused; document.getElementById('pauseBtn').textContent = paused?'RESUME':'PAUSE'; if(!paused) requestAnimationFrame(gameLoop); };
-  document.getElementById('settingsBtn').onclick = ()=>{ document.getElementById('settingsPanel').style.display = document.getElementById('settingsPanel').style.display==='none'?'block':'none'; };
-  document.getElementById('volumeSlider').oninput = e=>{ settings.volume=e.target.value; };
-  document.getElementById('difficultySelect').onchange = e=>{ settings.difficulty=e.target.value; };
-  document.getElementById('skinSelect').onchange = e=>{ settings.skin=e.target.value; }
+      const sounds = {
+        explosion: new Audio(assets.explosionSE),
+        bell: new Audio(assets.bellSE),
+        bgm: new Audio(assets.bgm)
+      };
+      sounds.explosion.volume = 1.0;
+      sounds.bell.loop = true;
+      sounds.bgm.loop = true;
 
-  // --- Main ---
-  loadAssets(()=>{ document.getElementById('startScreen').classList.remove('hidden'); });
-
-  function startGame(){
-    score=0; stage=1;
-    document.getElementById('startScreen').classList.add('hidden');
-    resetEntities(); requestAnimationFrame(gameLoop);
-  }
-
-  function gameLoop(){
-    if(paused) return;
-    update(); draw();
-    if(balls.every(b=>b.y-b.r>H)) return gameOver();
-    requestAnimationFrame(gameLoop);
-  }
-
-  function update(){
-    // Paddle move
-    if(keys.left) paddle.x-=paddle.speed;
-    if(keys.right) paddle.x+=paddle.speed;
-    paddle.x = Math.max(0, Math.min(W-paddle.w,paddle.x));
-    // Balls
-    balls.forEach(ball=>{
-      ball.x+=ball.vx; ball.y+=ball.vy;
-      if(ball.x-ball.r<0||ball.x+ball.r>W) ball.vx*=-1;
-      if(ball.y-ball.r<0) ball.vy*=-1;
-      // Paddle collision
-      if(ball.x>paddle.x && ball.x<paddle.x+paddle.w && ball.y+ball.r>paddle.y){ ball.vy*=-1; }
-      // Block collision & drops
-      blocks.forEach(b=>{
-        if(!b.alive) return;
-        if(ball.x>b.x && ball.x<b.x+b.w && ball.y-ball.r<b.y+b.h && ball.y+ball.r>b.y){
-          b.dur--; ball.vy*=-1;
-          if(b.dur<=0){ b.alive=false; score+=100; if(Math.random()<0.2){ const types=['multi','widen','fast']; powerUps.push(new PowerUp(b.x+b.w/2,b.y+b.h/2,types[Math.floor(Math.random()*types.length)])); }}
-        }
+      // イベント
+      document.getElementById('startButton').addEventListener('click', startGame);
+      document.getElementById('restartButton').addEventListener('click', restartGame);
+      document.addEventListener('keydown', e => {
+        if (e.key === 'ArrowLeft') leftPressed = true;
+        if (e.key === 'ArrowRight') rightPressed = true;
       });
-    });
-    // PowerUps
-    powerUps = powerUps.filter(p=>{
-      p.update();
-      // pickup
-      if(p.y+p.r>paddle.y && p.x>paddle.x && p.x<paddle.x+paddle.w){ activatePU(p.type); return false; }
-      return p.y<H;
-    });
-    // Stage clear
-    if(blocks.every(b=>!b.alive)) { stage++; resetEntities(); }
-  }
+      document.addEventListener('keyup', e => {
+        if (e.key === 'ArrowLeft') leftPressed = false;
+        if (e.key === 'ArrowRight') rightPressed = false;
+      });
 
-  function activatePU(type){
-    switch(type){
-      case 'multi': balls.push(new Ball(W/2,H/2,5,-5)); break;
-      case 'widen': paddle.w*=1.5; setTimeout(()=>paddle.w/=1.5,10000); break;
-      case 'fast': balls.forEach(b=>{ b.vx*=1.5; b.vy*=1.5; }); setTimeout(()=>balls.forEach(b=>{ b.vx/=1.5; b.vy/=1.5; }),10000); break;
-    }
-  }
+      // エンティティ初期化
+      function resetEntities() {
+        paddle = { x: W / 2 - 75, y: H - 50, w: 150, h: 20, speed: 8 };
+        ball = { x: W / 2, y: H / 2, r: 20, vx: 5, vy: -5 };
+        blocks = [];
+        const cols = 10, rows = stage + 4;
+        const blockW = W / cols, blockH = 30;
+        for (let y = 0; y < rows; y++) {
+          for (let x = 0; x < cols; x++) {
+            const img = imgObjects.blockImgs[Math.floor(Math.random() * imgObjects.blockImgs.length)];
+            blocks.push({ x: x * blockW, y: 50 + y * blockH, w: blockW - 2, h: blockH - 2, img, alive: true });
+          }
+        }
+      }
 
-  function draw(){
-    // Background
-    ctx.fillStyle = ctx.createPattern(assets.bgTile,'repeat'); ctx.fillRect(0,0,W,H);
-    // Walls
-    ctx.fillStyle = ctx.createPattern(assets.wall,'repeat-y'); ctx.fillRect(0,0,20,H); ctx.fillRect(W-20,0,20,H);
-    // Blocks
-    blocks.forEach(b=>{
-      if(b.alive){ ctx.globalAlpha = b.dur/b.maxDur; ctx.drawImage(assets.bgTile,b.x,b.y,b.w,b.h); ctx.globalAlpha=1; }
-    });
-    // Paddle
-    ctx.drawImage(assets.paddle,paddle.x,paddle.y,paddle.w,paddle.h);
-    // Balls
-    balls.forEach(ball=>{
-      ctx.save(); ctx.beginPath(); ctx.arc(ball.x,ball.y,ball.r,0,2*Math.PI); ctx.clip(); ctx.drawImage(assets.ball,ball.x-ball.r,ball.y-ball.r,ball.r*2,ball.r*2); ctx.restore();
-    });
-    // PowerUps
-    powerUps.forEach(p=>p.draw());
-    // HUD
-    document.getElementById('scoreDisplay').textContent = `Score: ${score}`;
-    document.getElementById('stageDisplay').textContent = `Stage: ${stage}`;
-  }
+      function startGame() {
+        document.getElementById('startScreen').classList.add('hidden');
+        score = 0; stage = 1;
+        resetEntities();
+        sounds.bgm.play();
+        requestAnimationFrame(gameLoop);
+      }
 
-  function gameOver(){
-    if(score>highScore){ highScore=score; localStorage.setItem(highScoreKey,highScore); }
-    document.getElementById('finalScore').textContent = score;
-    document.getElementById('highScoreDisplay').textContent = highScore;
-    document.getElementById('gameOverScreen').classList.remove('hidden');
-  }
+      function restartGame() {
+        sounds.bell.pause();
+        sounds.bell.currentTime = 0;
+        document.getElementById('gameOverScreen').classList.add('hidden');
+        startGame();
+      }
 
-  // Responsive
-  window.addEventListener('resize',()=>{ W=canvas.width=window.innerWidth; H=canvas.height=window.innerHeight; paddle.y=H-60; });
+      // メインループ
+      function gameLoop() {
+        update();
+        draw();
+        if (ball.y - ball.r > H) return gameOver();
+        requestAnimationFrame(gameLoop);
+      }
 
-  // Gamepad support
-  window.addEventListener('gamepadconnected',e=>{ gamepadIndex=e.gamepad.index; });
-  function pollGamepad(){ if(gamepadIndex!==null){ const gp=navigator.getGamepads()[gamepadIndex]; if(gp.axes[0]<-0.2) keys.left=true; else keys.left=false; if(gp.axes[0]>0.2) keys.right=true; else keys.right=false; } requestAnimationFrame(pollGamepad); }
-  pollGamepad();
+      function update() {
+        if (leftPressed) paddle.x -= paddle.speed;
+        if (rightPressed) paddle.x += paddle.speed;
+        paddle.x = Math.max(0, Math.min(W - paddle.w, paddle.x));
+
+        ball.x += ball.vx;
+        ball.y += ball.vy;
+
+        if (ball.x - ball.r < 0 || ball.x + ball.r > W) ball.vx *= -1;
+        if (ball.y - ball.r < 0) ball.vy *= -1;
+
+        // パドル衝突
+        if (ball.x > paddle.x && ball.x < paddle.x + paddle.w && ball.y + ball.r > paddle.y) {
+          ball.vy *= -1;
+        }
+
+        // ブロック衝突
+        blocks.forEach(b => {
+          if (!b.alive) return;
+          if (
+            ball.x > b.x && ball.x < b.x + b.w &&
+            ball.y - ball.r < b.y + b.h && ball.y + ball.r > b.y
+          ) {
+            b.alive = false;
+            ball.vy *= -1;
+            ctx.drawImage(imgObjects.explosion, b.x, b.y, b.w, b.h);
+            sounds.explosion.play();
+            score = Math.min(maxScore, score + 100);
+          }
+        });
+
+        if (blocks.every(b => !b.alive)) nextStage();
+      }
+
+      function nextStage() {
+        stage++;
+        resetEntities();
+      }
+
+      function gameOver() {
+        sounds.bgm.pause();
+        sounds.bell.play();
+        document.getElementById('finalScore').textContent = score;
+        document.getElementById('gameOverScreen').classList.remove('hidden');
+      }
+
+      function draw() {
+        // 背景
+        ctx.fillStyle = ctx.createPattern(imgObjects.bgTile, 'repeat');
+        ctx.fillRect(0, 0, W, H);
+
+        // 壁
+        ctx.fillStyle = ctx.createPattern(imgObjects.wallTile, 'repeat-y');
+        ctx.fillRect(0, 0, 20, H);
+        ctx.fillRect(W - 20, 0, 20, H);
+
+        // ブロック
+        blocks.forEach(b => {
+          if (b.alive) ctx.drawImage(b.img, b.x, b.y, b.w, b.h);
+        });
+
+        // パドル
+        ctx.drawImage(imgObjects.paddle, paddle.x, paddle.y, paddle.w, paddle.h);
+
+        // ボール
+        ctx.save();
+        ctx.beginPath();
+        ctx.arc(ball.x, ball.y, ball.r, 0, Math.PI * 2);
+        ctx.clip();
+        ctx.drawImage(imgObjects.ball, ball.x - ball.r, ball.y - ball.r, ball.r * 2, ball.r * 2);
+        ctx.restore();
+
+        // HUD
+        ctx.fillStyle = '#fff';
+        ctx.font = '20px sans-serif';
+        ctx.fillText(`Score: ${score}`, 30, 30);
+        ctx.fillText(`Stage: ${stage}`, 30, 60);
+      }
+    })();
   </script>
 </body>
 </html>
